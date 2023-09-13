@@ -9,8 +9,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TypeApplications #-}
 
-module Spec.TestFramework
-  where
+module Actus.TestFramework
+    where
 
 import Actus.Core
 import Actus.Domain hiding (Assertion)

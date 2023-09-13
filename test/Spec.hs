@@ -2,7 +2,7 @@ module Main
   ( main
   ) where
 
-import Spec.TestFramework (testCasesFromFile, tests)
+import Actus.TestFramework (testCasesFromFile, tests)
 import System.Environment
 import Test.Tasty
 
