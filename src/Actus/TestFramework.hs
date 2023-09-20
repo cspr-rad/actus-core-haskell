@@ -41,34 +41,44 @@ tests n t =
     [testCase (getField @"identifier" tc) (runTest tc {terms = setDefaultContractTermValues (terms tc)}) | tc <- t]
 
 runTest :: TestCase -> Assertion
-runTest tc@TestCase {..} =
-  let unscheduleEvents = join $ map (unSchedEv terms) eventsObserved
+runTest TestCase {..} =
+  let cashFlowsTo = produceCashflows identifier terms dataObserved eventsObserved to
+   in assertTestResults cashFlowsTo results
+
+produceCashflows 
+  :: String
+  -> ContractTerms Double
+  -> Map String DataObserved
+  -> [EventObserved]
+  -> Maybe LocalTime
+  -> [CashFlow Double]
+produceCashflows identifier terms dataObserved eventsObserved to =
+  let 
+      riskFactors i ev date =
+        case getValue i identifier terms dataObserved ev date of
+          Just v -> case ev of
+            RR -> defaultRiskFactors {o_rf_RRMO = v}
+            SC -> defaultRiskFactors {o_rf_SCMO = v}
+            DV -> defaultRiskFactors {dv_payoff = v}
+            XD -> defaultRiskFactors {xd_payoff = v}
+            _  -> defaultRiskFactors {o_rf_CURS = v}
+          Nothing -> defaultRiskFactors
+      unscheduleEvents = join $ map (unSchedEv terms) eventsObserved
       cashFlows = genProjectedCashflows riskFactors terms unscheduleEvents
       latestCashFlow = cashPaymentDay
                         <$> (find (\cf -> cashEvent cf == STD) cashFlows
                         <|> find (\cf -> contractType terms /= SWAPS && cashEvent cf == MD) cashFlows)
-      cashFlowsTo =
+  in
         maybe
           cashFlows
           (\d -> filter ((<= d) . cashPaymentDay) cashFlows)
           (min <$> latestCashFlow <*> to <|> latestCashFlow <|> to)
-   in assertTestResults cashFlowsTo results
-  where
-    riskFactors i ev date =
-      case getValue i tc ev date of
-        Just v -> case ev of
-          RR -> defaultRiskFactors {o_rf_RRMO = v}
-          SC -> defaultRiskFactors {o_rf_SCMO = v}
-          DV -> defaultRiskFactors {dv_payoff = v}
-          XD -> defaultRiskFactors {xd_payoff = v}
-          _  -> defaultRiskFactors {o_rf_CURS = v}
-        Nothing -> defaultRiskFactors
 
-getValue :: String -> TestCase -> EventType -> LocalTime -> Maybe Double
-getValue i TestCase {..} ev date =
+getValue :: String -> String -> ContractTerms Double -> Map String DataObserved -> EventType -> LocalTime -> Maybe Double
+getValue i identifier terms dataObserved ev date =
   do
     key <- observedKey ev
-    DataObserved {values} <- Map.lookup key dataObserved
+    DataObserved {values} <- Map.lookup key dataObserved 
     ValueObserved {value} <-
       L.find
         ( \ValueObserved {timestamp} ->
